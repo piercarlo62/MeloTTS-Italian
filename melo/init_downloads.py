@@ -11,4 +11,5 @@ if __name__ == '__main__':
         'ZH': TTS(language='ZH', device=device),
         'JP': TTS(language='JP', device=device),
         'KR': TTS(language='KR', device=device),
+        'IT': TTS(language='IT', device=device),
     }

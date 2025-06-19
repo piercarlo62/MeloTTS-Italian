@@ -9,3 +9,14 @@ build/
 
 *.zip
 *.wav
+
+# Visual Studio files
+.vs/
+*.vsidx
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Visual Studio 2022
+.vs/
