@@ -148,13 +148,13 @@ def run():
         writer = SummaryWriter(log_dir=hps.model_dir)
         writer_eval = SummaryWriter(log_dir=os.path.join(hps.model_dir, "eval"))
         
-        # Setup early stopping
-        early_stopping_config = getattr(hps.train, 'early_stopping', {})
-        if early_stopping_config.get('enabled', False):
+        # Setup early stopping - Fixed to work with HParams objects
+        early_stopping_config = getattr(hps.train, 'early_stopping', None)
+        if early_stopping_config and getattr(early_stopping_config, 'enabled', False):
             early_stopping = EarlyStopping(
-                patience=early_stopping_config.get('patience', 10),
-                min_delta=early_stopping_config.get('min_delta', 0.001),
-                restore_best_weights=early_stopping_config.get('restore_best_weights', True)
+                patience=getattr(early_stopping_config, 'patience', 10),
+                min_delta=getattr(early_stopping_config, 'min_delta', 0.001),
+                restore_best_weights=getattr(early_stopping_config, 'restore_best_weights', True)
             )
             logger.info(f"Early stopping enabled with patience={early_stopping.patience}")
         else:
@@ -363,8 +363,8 @@ def run():
                 )
                 
                 # Check early stopping
-                if early_stopping is not None and val_loss is not None:
-                    # Create current model paths for best model tracking
+                if early_stopping is not None:
+                    # Get current model paths for saving best models
                     current_model_paths = {
                         'G': os.path.join(hps.model_dir, f"G_{global_step}.pth"),
                         'D': os.path.join(hps.model_dir, f"D_{global_step}.pth"),
@@ -373,11 +373,10 @@ def run():
                         current_model_paths['DUR'] = os.path.join(hps.model_dir, f"DUR_{global_step}.pth")
                     
                     # Check if we should stop early
-                    should_stop = early_stopping(val_loss, epoch, current_model_paths, logger)
-                    
-                    if should_stop:
+                    if early_stopping(val_loss, epoch, current_model_paths, logger):
                         logger.info("Early stopping triggered!")
-                        # Restore best model weights
+                        
+                        # Restore best weights if enabled
                         early_stopping.restore_best_model(
                             [net_g, net_d, net_dur_disc],
                             [optim_g, optim_d, optim_dur_disc],
@@ -390,14 +389,14 @@ def run():
                             optim_g,
                             hps.train.learning_rate,
                             early_stopping.best_epoch,
-                            os.path.join(hps.model_dir, "G_best_early_stop.pth"),
+                            os.path.join(hps.model_dir, "G_best.pth"),
                         )
                         utils.save_checkpoint(
                             net_d,
                             optim_d,
                             hps.train.learning_rate,
                             early_stopping.best_epoch,
-                            os.path.join(hps.model_dir, "D_best_early_stop.pth"),
+                            os.path.join(hps.model_dir, "D_best.pth"),
                         )
                         if net_dur_disc is not None:
                             utils.save_checkpoint(
@@ -405,12 +404,13 @@ def run():
                                 optim_dur_disc,
                                 hps.train.learning_rate,
                                 early_stopping.best_epoch,
-                                os.path.join(hps.model_dir, "DUR_best_early_stop.pth"),
+                                os.path.join(hps.model_dir, "DUR_best.pth"),
                             )
                         
                         logger.info(f"Training stopped early at epoch {epoch}")
                         logger.info(f"Best validation loss: {early_stopping.best_loss:.6f} at epoch {early_stopping.best_epoch}")
                         break
+                        
             else:
                 train_and_evaluate(
                     rank,
@@ -435,16 +435,6 @@ def run():
         if net_dur_disc is not None:
             scheduler_dur_disc.step()
 
-    # Final logging
-    if rank == 0:
-        if early_stopping is not None:
-            if early_stopping.early_stop:
-                logger.info("Training completed with early stopping")
-            else:
-                logger.info("Training completed without early stopping")
-        else:
-            logger.info("Training completed")
-
 
 def train_and_evaluate(
     rank, epoch, hps, nets, optims, schedulers, scaler, loaders, logger, writers
@@ -464,7 +454,11 @@ def train_and_evaluate(
     if net_dur_disc is not None:
         net_dur_disc.train()
         
-    # Training loop
+    # Training phase
+    total_loss_gen = 0
+    total_loss_disc = 0
+    num_batches = 0
+    
     for batch_idx, (
         x,
         x_lengths,
@@ -600,6 +594,11 @@ def train_and_evaluate(
         scaler.step(optim_g)
         scaler.update()
 
+        # Accumulate losses for validation
+        total_loss_gen += loss_gen_all.item()
+        total_loss_disc += loss_disc_all.item()
+        num_batches += 1
+
         if rank == 0:
             if global_step % hps.train.log_interval == 0:
                 lr = optim_g.param_groups[0]["lr"]
@@ -658,7 +657,7 @@ def train_and_evaluate(
                 )
 
             if global_step % hps.train.eval_interval == 0:
-                val_loss = evaluate(hps, net_g, eval_loader, writer_eval)
+                evaluate(hps, net_g, eval_loader, writer_eval)
                 utils.save_checkpoint(
                     net_g,
                     optim_g,
@@ -693,25 +692,29 @@ def train_and_evaluate(
 
     if rank == 0:
         logger.info("====> Epoch: {}".format(epoch))
-        # Return validation loss for early stopping
+        
+        # Calculate validation loss
+        val_loss = None
         if eval_loader is not None:
-            val_loss = evaluate(hps, net_g, eval_loader, writer_eval)
-            return val_loss
+            val_loss = evaluate_loss(hps, net_g, eval_loader, logger)
+            logger.info(f"Validation loss: {val_loss:.6f}")
+        else:
+            # Use training loss as proxy if no validation
+            val_loss = total_loss_gen / num_batches if num_batches > 0 else float('inf')
+            logger.info(f"Training loss (used as validation proxy): {val_loss:.6f}")
+        
+        torch.cuda.empty_cache()
+        return val_loss
     
     torch.cuda.empty_cache()
     return None
 
 
-def evaluate(hps, generator, eval_loader, writer_eval):
+def evaluate_loss(hps, generator, eval_loader, logger):
+    """Calculate validation loss"""
     generator.eval()
-    image_dict = {}
-    audio_dict = {}
-    print("Evaluating ...")
-    
-    # Track validation losses for early stopping
-    total_mel_loss = 0.0
-    total_kl_loss = 0.0
-    total_samples = 0
+    total_loss = 0
+    num_batches = 0
     
     with torch.no_grad():
         for batch_idx, (
@@ -736,8 +739,8 @@ def evaluate(hps, generator, eval_loader, writer_eval):
             tone = tone.cuda()
             language = language.cuda()
             
-            # Calculate validation loss for early stopping
             try:
+                # Forward pass for validation loss
                 (
                     y_hat,
                     l_length,
@@ -782,116 +785,120 @@ def evaluate(hps, generator, eval_loader, writer_eval):
                     hps.data.mel_fmax,
                 )
                 
-                # Accumulate validation losses
-                mel_loss = F.l1_loss(y_mel, y_hat_mel)
-                kl_loss_val = kl_loss(z_p, logs_q, m_p, logs_p, z_mask)
+                # Calculate validation loss components
+                loss_mel = F.l1_loss(y_mel, y_hat_mel) * hps.train.c_mel
+                loss_kl = kl_loss(z_p, logs_q, m_p, logs_p, z_mask) * hps.train.c_kl
+                loss_dur = torch.sum(l_length.float())
                 
-                total_mel_loss += mel_loss.item()
-                total_kl_loss += kl_loss_val.item()
-                total_samples += 1
+                val_loss = loss_mel + loss_kl + loss_dur
+                total_loss += val_loss.item()
+                num_batches += 1
                 
             except Exception as e:
-                print(f"Error in validation batch {batch_idx}: {e}")
+                logger.warning(f"Error in validation batch {batch_idx}: {e}")
                 continue
-            
-            # Generate samples for visualization (only for first few batches)
-            if batch_idx < 5:  # Limit to first 5 batches for efficiency
-                for use_sdp in [True, False]:
-                    y_hat_infer, attn_infer, mask, *_ = generator.module.infer(
-                        x,
-                        x_lengths,
-                        speakers,
-                        tone,
-                        language,
-                        bert,
-                        ja_bert,
-                        y=spec,
-                        max_len=1000,
-                        sdp_ratio=0.0 if not use_sdp else 1.0,
-                    )
-                    y_hat_lengths = mask.sum([1, 2]).long() * hps.data.hop_length
+                
+            # Limit validation batches to avoid long evaluation
+            if batch_idx >= 10:  # Only evaluate on first 10 batches
+                break
+    
+    generator.train()
+    return total_loss / num_batches if num_batches > 0 else float('inf')
 
-                    mel = spec_to_mel_torch(
-                        spec,
-                        hps.data.filter_length,
-                        hps.data.n_mel_channels,
-                        hps.data.sampling_rate,
-                        hps.data.mel_fmin,
-                        hps.data.mel_fmax,
-                    )
-                    y_hat_mel_infer = mel_spectrogram_torch(
-                        y_hat_infer.squeeze(1).float(),
-                        hps.data.filter_length,
-                        hps.data.n_mel_channels,
-                        hps.data.sampling_rate,
-                        hps.data.hop_length,
-                        hps.data.win_length,
-                        hps.data.mel_fmin,
-                        hps.data.mel_fmax,
-                    )
-                    image_dict.update(
-                        {
-                            f"gen/mel_{batch_idx}": utils.plot_spectrogram_to_numpy(
-                                y_hat_mel_infer[0].cpu().numpy()
-                            )
-                        }
-                    )
-                    audio_dict.update(
-                        {
-                            f"gen/audio_{batch_idx}_{use_sdp}": y_hat_infer[
-                                0, :, : y_hat_lengths[0]
-                            ]
-                        }
-                    )
-                    image_dict.update(
-                        {
-                            f"gt/mel_{batch_idx}": utils.plot_spectrogram_to_numpy(
-                                mel[0].cpu().numpy()
-                            )
-                        }
-                    )
-                    audio_dict.update({f"gt/audio_{batch_idx}": y[0, :, : y_lengths[0]]})
 
-    # Calculate average validation loss
-    if total_samples > 0:
-        avg_mel_loss = total_mel_loss / total_samples
-        avg_kl_loss = total_kl_loss / total_samples
-        total_val_loss = avg_mel_loss + avg_kl_loss
-        
-        print(f"Validation - Mel Loss: {avg_mel_loss:.6f}, KL Loss: {avg_kl_loss:.6f}, Total: {total_val_loss:.6f}")
-        
-        # Log validation losses to tensorboard
-        if writer_eval is not None:
-            utils.summarize(
-                writer=writer_eval,
-                global_step=global_step,
-                images=image_dict,
-                audios=audio_dict,
-                audio_sampling_rate=hps.data.sampling_rate,
-                scalars={
-                    "validation/mel_loss": avg_mel_loss,
-                    "validation/kl_loss": avg_kl_loss,
-                    "validation/total_loss": total_val_loss,
-                }
-            )
-    else:
-        total_val_loss = float('inf')
-        print("No valid validation samples processed")
-        
-        if writer_eval is not None:
-            utils.summarize(
-                writer=writer_eval,
-                global_step=global_step,
-                images=image_dict,
-                audios=audio_dict,
-                audio_sampling_rate=hps.data.sampling_rate,
-            )
+def evaluate(hps, generator, eval_loader, writer_eval):
+    generator.eval()
+    image_dict = {}
+    audio_dict = {}
+    print("Evaluating ...")
+    with torch.no_grad():
+        for batch_idx, (
+            x,
+            x_lengths,
+            spec,
+            spec_lengths,
+            y,
+            y_lengths,
+            speakers,
+            tone,
+            language,
+            bert,
+            ja_bert,
+        ) in enumerate(eval_loader):
+            x, x_lengths = x.cuda(), x_lengths.cuda()
+            spec, spec_lengths = spec.cuda(), spec_lengths.cuda()
+            y, y_lengths = y.cuda(), y_lengths.cuda()
+            speakers = speakers.cuda()
+            bert = bert.cuda()
+            ja_bert = ja_bert.cuda()
+            tone = tone.cuda()
+            language = language.cuda()
+            for use_sdp in [True, False]:
+                y_hat, attn, mask, *_ = generator.module.infer(
+                    x,
+                    x_lengths,
+                    speakers,
+                    tone,
+                    language,
+                    bert,
+                    ja_bert,
+                    y=spec,
+                    max_len=1000,
+                    sdp_ratio=0.0 if not use_sdp else 1.0,
+                )
+                y_hat_lengths = mask.sum([1, 2]).long() * hps.data.hop_length
 
+                mel = spec_to_mel_torch(
+                    spec,
+                    hps.data.filter_length,
+                    hps.data.n_mel_channels,
+                    hps.data.sampling_rate,
+                    hps.data.mel_fmin,
+                    hps.data.mel_fmax,
+                )
+                y_hat_mel = mel_spectrogram_torch(
+                    y_hat.squeeze(1).float(),
+                    hps.data.filter_length,
+                    hps.data.n_mel_channels,
+                    hps.data.sampling_rate,
+                    hps.data.hop_length,
+                    hps.data.win_length,
+                    hps.data.mel_fmin,
+                    hps.data.mel_fmax,
+                )
+                image_dict.update(
+                    {
+                        f"gen/mel_{batch_idx}": utils.plot_spectrogram_to_numpy(
+                            y_hat_mel[0].cpu().numpy()
+                        )
+                    }
+                )
+                audio_dict.update(
+                    {
+                        f"gen/audio_{batch_idx}_{use_sdp}": y_hat[
+                            0, :, : y_hat_lengths[0]
+                        ]
+                    }
+                )
+                image_dict.update(
+                    {
+                        f"gt/mel_{batch_idx}": utils.plot_spectrogram_to_numpy(
+                            mel[0].cpu().numpy()
+                        )
+                    }
+                )
+                audio_dict.update({f"gt/audio_{batch_idx}": y[0, :, : y_lengths[0]]})
+
+    utils.summarize(
+        writer=writer_eval,
+        global_step=global_step,
+        images=image_dict,
+        audios=audio_dict,
+        audio_sampling_rate=hps.data.sampling_rate,
+    )
     generator.train()
     print('Evaluate done')
     torch.cuda.empty_cache()
-    
-    return total_val_loss
 
 
 if __name__ == "__main__":

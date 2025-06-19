@@ -15,7 +15,7 @@
     "add_blank": true,
     "n_speakers": 256,
     "spk2id": {
-      "IT": 0
+      "piero": 0
     }
   },
   "model": {
