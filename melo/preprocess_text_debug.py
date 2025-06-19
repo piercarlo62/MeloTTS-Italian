@@ -47,22 +47,74 @@ def main(
         cleaned_path = metadata + ".cleaned"
 
     if clean:
+        print(f"Starting preprocessing of {metadata}")
+        print(f"Output will be saved to {cleaned_path}")
+        
         out_file = open(cleaned_path, "w", encoding="utf-8")
         new_symbols = []
-        for line in tqdm(open(metadata, encoding="utf-8").readlines()):
+        
+        lines = open(metadata, encoding="utf-8").readlines()
+        print(f"Total lines to process: {len(lines)}")
+        
+        for line_num, line in enumerate(tqdm(lines), 1):
             try:
-                utt, spk, language, text = line.strip().split("|")
-                norm_text, phones, tones, word2ph, bert = clean_text_bert(text, language, device='cuda:0')
+                print(f"\n--- Processing line {line_num} ---")
+                print(f"Raw line: {line.strip()}")
+                
+                # Parse the line
+                parts = line.strip().split("|")
+                print(f"Split into {len(parts)} parts: {parts}")
+                
+                if len(parts) != 4:
+                    print(f"ERROR: Expected 4 parts, got {len(parts)}")
+                    print(f"Parts: {parts}")
+                    continue
+                
+                utt, spk, language, text = parts
+                print(f"Parsed - utt: {utt}, spk: {spk}, language: {language}")
+                print(f"Text: {text}")
+                
+                # Check if audio file exists
+                if not os.path.exists(utt):
+                    print(f"WARNING: Audio file does not exist: {utt}")
+                    print(f"Current working directory: {os.getcwd()}")
+                    print(f"Absolute path would be: {os.path.abspath(utt)}")
+                
+                print("Starting text cleaning and BERT processing...")
+                
+                # This is where the error likely occurs
+                norm_text, phones, tones, word2ph, bert = clean_text_bert(text, language, device='cpu')
+                
+                print(f"Text processing successful!")
+                print(f"Normalized text: {norm_text}")
+                print(f"Phones: {phones[:10]}..." if len(phones) > 10 else f"Phones: {phones}")
+                print(f"Tones: {tones[:10]}..." if len(tones) > 10 else f"Tones: {tones}")
+                print(f"Word2ph length: {len(word2ph)}")
+                print(f"BERT shape: {bert.shape}")
+                
+                # Check for new symbols
                 for ph in phones:
                     if ph not in symbols and ph not in new_symbols:
                         new_symbols.append(ph)
-                        print('update!, now symbols:')
+                        print(f'New symbol found: {ph}')
+                        print('Updated symbols list:')
                         print(new_symbols)
                         with open(f'{language}_symbol.txt', 'w', encoding='utf-8') as f:
                             f.write(f'{new_symbols}')
 
-                assert len(phones) == len(tones)
-                assert len(phones) == sum(word2ph)
+                # Validation checks
+                print("Performing validation checks...")
+                if len(phones) != len(tones):
+                    print(f"ERROR: phones length ({len(phones)}) != tones length ({len(tones)})")
+                    continue
+                    
+                if len(phones) != sum(word2ph):
+                    print(f"ERROR: phones length ({len(phones)}) != sum of word2ph ({sum(word2ph)})")
+                    continue
+                
+                print("Validation passed, writing to output file...")
+                
+                # Write to output file
                 out_file.write(
                     "{}|{}|{}|{}|{}|{}|{}\n".format(
                         utt,
@@ -74,16 +126,35 @@ def main(
                         " ".join([str(i) for i in word2ph]),
                     )
                 )
+                
+                # Save BERT features
                 bert_path = utt.replace(".wav", ".bert.pt")
+                print(f"Saving BERT features to: {bert_path}")
                 os.makedirs(os.path.dirname(bert_path), exist_ok=True)
                 torch.save(bert.cpu(), bert_path)
+                
+                print(f"Line {line_num} processed successfully!")
+                
             except Exception as error:
-                print("err!", line, error)
+                print(f"\n!!! ERROR processing line {line_num} !!!")
+                print(f"Line content: {line.strip()}")
+                print(f"Error type: {type(error).__name__}")
+                print(f"Error message: {str(error)}")
+                print(f"Error details: {repr(error)}")
+                
+                # Print more detailed error info
+                import traceback
+                print("Full traceback:")
+                traceback.print_exc()
+                
+                # Continue with next line instead of stopping
+                continue
 
         out_file.close()
-
+        print(f"\nPreprocessing completed. Results saved to {cleaned_path}")
         metadata = cleaned_path
 
+    # Rest of the function remains the same...
     spk_utt_map = defaultdict(list)
     spk_id_map = {}
     current_sid = 0
