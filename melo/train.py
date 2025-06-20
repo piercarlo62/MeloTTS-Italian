@@ -47,17 +47,16 @@ global_step = 0
 
 
 def run():
-    print("=== TRAINING STARTED ===")
-    print("Loading hyperparameters...")
-
+    import traceback
     hps = utils.get_hparams()
-    print("Hyperparameters loaded successfully")
-    print(f"Model directory: {hps.model_dir}")
-    print(f"Training files: {hps.data.training_files}")
+    logger = utils.get_logger(hps.model_dir)
+    logger.info("=== TRAINING STARTED ===")
+    logger.info(f"Model directory: {hps.model_dir}")
+    logger.info(f"Training files: {hps.data.training_files}")
 
-    print("Setting up distributed training...")
+    logger.info("Setting up distributed training...")
     local_rank = int(os.environ["LOCAL_RANK"])
-    print(f"Local rank: {local_rank}")
+    logger.info(f"Local rank: {local_rank}")
 
     dist.init_process_group(
         backend="gloo",
@@ -71,7 +70,6 @@ def run():
     torch.cuda.set_device(rank)
     global global_step
     if rank == 0:
-        logger = utils.get_logger(hps.model_dir)
         logger.info(f"=== TRAINING SETUP ===")
         logger.info(f"Process ID: {os.getpid()}")
         logger.info(f"Rank: {rank}, World size: {n_gpus}")
@@ -213,6 +211,7 @@ def run():
                     )
     except Exception as e: 
         logger.error(f"Error in init_model: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
 
     try:
         if net_dur_disc is not None:
@@ -278,6 +277,7 @@ def run():
     else:
         scheduler_dur_disc = None
     scaler = GradScaler(enabled=hps.train.fp16_run)
+
 
     for epoch in range(epoch_str, hps.train.epochs + 1):
         if rank == 0:
