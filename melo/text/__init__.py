@@ -13,20 +13,31 @@ def cleaned_text_to_sequence(cleaned_text, tones, language, symbol_to_id=None):
     
     symbol_to_id_map = symbol_to_id if symbol_to_id else _symbol_to_id
     
-    # Normalize both the input text and create a normalized symbol map
-    cleaned_text = unicodedata.normalize('NFD', cleaned_text)
+    # Handle both string and list inputs
+    if isinstance(cleaned_text, str):
+        # If it's a string, normalize and convert to list
+        cleaned_text = unicodedata.normalize('NFD', cleaned_text)
+        cleaned_text = list(cleaned_text)
+    elif isinstance(cleaned_text, list):
+        # If it's already a list, normalize each element
+        cleaned_text = [unicodedata.normalize('NFD', symbol) if isinstance(symbol, str) else symbol 
+                       for symbol in cleaned_text]
     
     # Create a normalized version of the symbol map
     normalized_symbol_map = {}
     for symbol, id_val in symbol_to_id_map.items():
-        normalized_symbol = unicodedata.normalize('NFD', symbol)
-        normalized_symbol_map[normalized_symbol] = id_val
+        if isinstance(symbol, str):
+            normalized_symbol = unicodedata.normalize('NFD', symbol)
+            normalized_symbol_map[normalized_symbol] = id_val
+        else:
+            normalized_symbol_map[symbol] = id_val
     
     # Debug logging
     if hasattr(logging, '_logger_initialized'):
         logger.info(f"DEBUG: cleaned_text_to_sequence called with language: {language}")
+        logger.info(f"DEBUG: cleaned_text type: {type(cleaned_text)}")
         logger.info(f"DEBUG: cleaned_text length: {len(cleaned_text)}")
-        logger.info(f"DEBUG: cleaned_text (first 50 chars): {repr(cleaned_text[:50])}")
+        logger.info(f"DEBUG: cleaned_text (first 10 items): {cleaned_text[:10]}")
         logger.info(f"DEBUG: Available languages in tone_start_map: {list(language_tone_start_map.keys())}")
         logger.info(f"DEBUG: Available languages in id_map: {list(language_id_map.keys())}")
     
@@ -38,12 +49,17 @@ def cleaned_text_to_sequence(cleaned_text, tones, language, symbol_to_id=None):
             logger.error(f"ERROR: Available symbols count: {len(normalized_symbol_map)}")
             # Add detailed debugging for the missing symbol
             missing_symbol = str(e).strip("'")
-            logger.error(f"ERROR: Missing symbol Unicode: U+{ord(missing_symbol):04X}")
-            logger.error(f"ERROR: Missing symbol name: {unicodedata.name(missing_symbol, 'UNKNOWN')}")
+            if missing_symbol:
+                logger.error(f"ERROR: Missing symbol Unicode: U+{ord(missing_symbol):04X}")
+                logger.error(f"ERROR: Missing symbol name: {unicodedata.name(missing_symbol, 'UNKNOWN')}")
             
             # Show available diacritic symbols
-            diacritic_symbols = [s for s in normalized_symbol_map.keys() if unicodedata.combining(s)]
-            logger.error(f"ERROR: Available diacritic symbols: {[repr(s) for s in diacritic_symbols]}")
+            diacritic_symbols = [s for s in normalized_symbol_map.keys() if isinstance(s, str) and unicodedata.combining(s)]
+            logger.error(f"ERROR: Available diacritic symbols: {[repr(s) for s in diacritic_symbols[:10]]}")
+            
+            # Show some regular symbols too
+            regular_symbols = [s for s in list(normalized_symbol_map.keys())[:20]]
+            logger.error(f"ERROR: Sample available symbols: {regular_symbols}")
         raise e
     
     try:
