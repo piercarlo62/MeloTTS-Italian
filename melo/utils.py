@@ -9,6 +9,12 @@ from scipy.io.wavfile import read
 import torch
 import torchaudio
 import librosa
+
+# Fix matplotlib backend issue - must be before any matplotlib imports
+import matplotlib
+matplotlib.use('Agg', force=True)  # Force the Agg backend
+import matplotlib.pyplot as plt
+
 from melo.text import cleaned_text_to_sequence, get_bert
 from melo.text.cleaner import clean_text
 from melo import commons
@@ -167,15 +173,6 @@ def latest_checkpoint_path(dir_path, regex="G_*.pth"):
 
 
 def plot_spectrogram_to_numpy(spectrogram):
-    global MATPLOTLIB_FLAG
-    if not MATPLOTLIB_FLAG:
-        import matplotlib
-
-        matplotlib.use("Agg")
-        MATPLOTLIB_FLAG = True
-        mpl_logger = logging.getLogger("matplotlib")
-        mpl_logger.setLevel(logging.WARNING)
-    import matplotlib.pylab as plt
     import numpy as np
 
     fig, ax = plt.subplots(figsize=(10, 2))
@@ -193,15 +190,6 @@ def plot_spectrogram_to_numpy(spectrogram):
 
 
 def plot_alignment_to_numpy(alignment, info=None):
-    global MATPLOTLIB_FLAG
-    if not MATPLOTLIB_FLAG:
-        import matplotlib
-
-        matplotlib.use("Agg")
-        MATPLOTLIB_FLAG = True
-        mpl_logger = logging.getLogger("matplotlib")
-        mpl_logger.setLevel(logging.WARNING)
-    import matplotlib.pylab as plt
     import numpy as np
 
     fig, ax = plt.subplots(figsize=(6, 4))
