@@ -117,6 +117,9 @@ def load_checkpoint(checkpoint_path, model, optimizer=None, skip_optimizer=False
 
 
 def save_checkpoint(model, optimizer, learning_rate, iteration, checkpoint_path):
+    # Create directory if it doesn't exist
+    os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+    
     logger.info(
         "Saving model and optimizer state at iteration {} to {}".format(
             iteration, checkpoint_path
