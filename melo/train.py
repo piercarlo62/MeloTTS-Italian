@@ -498,6 +498,7 @@ def train_and_evaluate(
                     )
                 )
                 logger.info([x.item() for x in losses] + [global_step, lr])
+                import traceback
                 try:
                     scalar_dict = {
                         "loss/g/total": loss_gen_all,
