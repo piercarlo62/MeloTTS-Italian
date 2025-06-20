@@ -166,7 +166,9 @@ def latest_checkpoint_path(dir_path, regex="G_*.pth"):
     return x
 
 
-def plot_spectrogram_to_numpy(spectrogram):
+def plot_spectrogram_to_numpy(spectrogram, logger=None):
+    if logger is None:
+        logger = logging.getLogger(__name__)
     global MATPLOTLIB_FLAG
     if not MATPLOTLIB_FLAG:
         import matplotlib
@@ -199,7 +201,10 @@ def plot_spectrogram_to_numpy(spectrogram):
     return data
 
 
-def plot_alignment_to_numpy(alignment, info=None):
+def plot_alignment_to_numpy(alignment, info=None,  logger = None):
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
     global MATPLOTLIB_FLAG
     if not MATPLOTLIB_FLAG:
         import matplotlib

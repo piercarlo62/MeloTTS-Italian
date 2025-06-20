@@ -526,16 +526,16 @@ def train_and_evaluate(
 
                 image_dict = {
                     "slice/mel_org": utils.plot_spectrogram_to_numpy(
-                        y_mel[0].data.cpu().numpy()
+                        y_mel[0].data.cpu().numpy(), logger=logger
                     ),
                     "slice/mel_gen": utils.plot_spectrogram_to_numpy(
-                        y_hat_mel[0].data.cpu().numpy()
+                        y_hat_mel[0].data.cpu().numpy(), logger=logger
                     ),
                     "all/mel": utils.plot_spectrogram_to_numpy(
-                        mel[0].data.cpu().numpy()
+                        mel[0].data.cpu().numpy(), logger=logger
                     ),
                     "all/attn": utils.plot_alignment_to_numpy(
-                        attn[0, 0].data.cpu().numpy()
+                        attn[0, 0].data.cpu().numpy(), logger=logger
                     ),
                 }
                 utils.summarize(
