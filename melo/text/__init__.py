@@ -1,4 +1,5 @@
 from .symbols import *
+import unicodedata
 
 
 _symbol_to_id = {s: i for i, s in enumerate(symbols)}
@@ -6,23 +7,43 @@ _symbol_to_id = {s: i for i, s in enumerate(symbols)}
 
 def cleaned_text_to_sequence(cleaned_text, tones, language, symbol_to_id=None):
     import logging
+    import unicodedata
+    
     logger = logging.getLogger(__name__)
     
     symbol_to_id_map = symbol_to_id if symbol_to_id else _symbol_to_id
+    
+    # Normalize both the input text and create a normalized symbol map
+    cleaned_text = unicodedata.normalize('NFD', cleaned_text)
+    
+    # Create a normalized version of the symbol map
+    normalized_symbol_map = {}
+    for symbol, id_val in symbol_to_id_map.items():
+        normalized_symbol = unicodedata.normalize('NFD', symbol)
+        normalized_symbol_map[normalized_symbol] = id_val
     
     # Debug logging
     if hasattr(logging, '_logger_initialized'):
         logger.info(f"DEBUG: cleaned_text_to_sequence called with language: {language}")
         logger.info(f"DEBUG: cleaned_text length: {len(cleaned_text)}")
+        logger.info(f"DEBUG: cleaned_text (first 50 chars): {repr(cleaned_text[:50])}")
         logger.info(f"DEBUG: Available languages in tone_start_map: {list(language_tone_start_map.keys())}")
         logger.info(f"DEBUG: Available languages in id_map: {list(language_id_map.keys())}")
     
     try:
-        phones = [symbol_to_id_map[symbol] for symbol in cleaned_text]
+        phones = [normalized_symbol_map[symbol] for symbol in cleaned_text]
     except KeyError as e:
         if hasattr(logging, '_logger_initialized'):
             logger.error(f"ERROR: Symbol not found: {e}")
-            logger.error(f"ERROR: Available symbols count: {len(symbol_to_id_map)}")
+            logger.error(f"ERROR: Available symbols count: {len(normalized_symbol_map)}")
+            # Add detailed debugging for the missing symbol
+            missing_symbol = str(e).strip("'")
+            logger.error(f"ERROR: Missing symbol Unicode: U+{ord(missing_symbol):04X}")
+            logger.error(f"ERROR: Missing symbol name: {unicodedata.name(missing_symbol, 'UNKNOWN')}")
+            
+            # Show available diacritic symbols
+            diacritic_symbols = [s for s in normalized_symbol_map.keys() if unicodedata.combining(s)]
+            logger.error(f"ERROR: Available diacritic symbols: {[repr(s) for s in diacritic_symbols]}")
         raise e
     
     try:
