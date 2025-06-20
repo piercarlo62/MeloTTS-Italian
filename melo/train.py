@@ -80,137 +80,140 @@ def run():
         utils.check_git_hash(hps.model_dir)
         writer = SummaryWriter(log_dir=hps.model_dir)
         writer_eval = SummaryWriter(log_dir=os.path.join(hps.model_dir, "eval"))
-    train_dataset = TextAudioSpeakerLoader(hps.data.training_files, hps.data)
-    train_sampler = DistributedBucketSampler(
-        train_dataset,
-        hps.train.batch_size,
-        [32, 300, 400, 500, 600, 700, 800, 900, 1000],
-        num_replicas=n_gpus,
-        rank=rank,
-        shuffle=True,
-    )
-    collate_fn = TextAudioSpeakerCollate()
-    train_loader = DataLoader(
-        train_dataset,
-        num_workers=16,
-        shuffle=False,
-        pin_memory=True,
-        collate_fn=collate_fn,
-        batch_sampler=train_sampler,
-        persistent_workers=True,
-        prefetch_factor=4,
-    )  # DataLoader config could be adjusted.
-    if rank == 0:
-        eval_dataset = TextAudioSpeakerLoader(hps.data.validation_files, hps.data)
-        eval_loader = DataLoader(
-            eval_dataset,
-            num_workers=0,
-            shuffle=False,
-            batch_size=1,
-            pin_memory=True,
-            drop_last=False,
-            collate_fn=collate_fn,
+    try:
+        train_dataset = TextAudioSpeakerLoader(hps.data.training_files, hps.data)
+        train_sampler = DistributedBucketSampler(
+            train_dataset,
+            hps.train.batch_size,
+            [32, 300, 400, 500, 600, 700, 800, 900, 1000],
+            num_replicas=n_gpus,
+            rank=rank,
+            shuffle=True,
         )
-    if (
-        "use_noise_scaled_mas" in hps.model.keys()
-        and hps.model.use_noise_scaled_mas is True
-    ):
-        print("Using noise scaled MAS for VITS2")
-        mas_noise_scale_initial = 0.01
-        noise_scale_delta = 2e-6
-    else:
-        print("Using normal MAS for VITS1")
-        mas_noise_scale_initial = 0.0
-        noise_scale_delta = 0.0
-    if (
-        "use_duration_discriminator" in hps.model.keys()
-        and hps.model.use_duration_discriminator is True
-    ):
-        print("Using duration discriminator for VITS2")
-        net_dur_disc = DurationDiscriminator(
-            hps.model.hidden_channels,
-            hps.model.hidden_channels,
-            3,
-            0.1,
-            gin_channels=hps.model.gin_channels if hps.data.n_speakers != 0 else 0,
-        ).cuda(rank)
-    if (
-        "use_spk_conditioned_encoder" in hps.model.keys()
-        and hps.model.use_spk_conditioned_encoder is True
-    ):
-        if hps.data.n_speakers == 0:
-            raise ValueError(
-                "n_speakers must be > 0 when using spk conditioned encoder to train multi-speaker model"
+        collate_fn = TextAudioSpeakerCollate()
+        train_loader = DataLoader(
+            train_dataset,
+            num_workers=16,
+            shuffle=False,
+            pin_memory=True,
+            collate_fn=collate_fn,
+            batch_sampler=train_sampler,
+            persistent_workers=True,
+            prefetch_factor=4,
+        )  # DataLoader config could be adjusted.
+        if rank == 0:
+            eval_dataset = TextAudioSpeakerLoader(hps.data.validation_files, hps.data)
+            eval_loader = DataLoader(
+                eval_dataset,
+                num_workers=0,
+                shuffle=False,
+                batch_size=1,
+                pin_memory=True,
+                drop_last=False,
+                collate_fn=collate_fn,
             )
-    else:
-        print("Using normal encoder for VITS1")
+        if (
+            "use_noise_scaled_mas" in hps.model.keys()
+            and hps.model.use_noise_scaled_mas is True
+        ):
+            print("Using noise scaled MAS for VITS2")
+            mas_noise_scale_initial = 0.01
+            noise_scale_delta = 2e-6
+        else:
+            print("Using normal MAS for VITS1")
+            mas_noise_scale_initial = 0.0
+            noise_scale_delta = 0.0
+        if (
+            "use_duration_discriminator" in hps.model.keys()
+            and hps.model.use_duration_discriminator is True
+        ):
+            print("Using duration discriminator for VITS2")
+            net_dur_disc = DurationDiscriminator(
+                hps.model.hidden_channels,
+                hps.model.hidden_channels,
+                3,
+                0.1,
+                gin_channels=hps.model.gin_channels if hps.data.n_speakers != 0 else 0,
+            ).cuda(rank)
+        if (
+            "use_spk_conditioned_encoder" in hps.model.keys()
+            and hps.model.use_spk_conditioned_encoder is True
+        ):
+            if hps.data.n_speakers == 0:
+                raise ValueError(
+                    "n_speakers must be > 0 when using spk conditioned encoder to train multi-speaker model"
+                )
+        else:
+            print("Using normal encoder for VITS1")
 
-    net_g = SynthesizerTrn(
-        len(symbols),
-        hps.data.filter_length // 2 + 1,
-        hps.train.segment_size // hps.data.hop_length,
-        n_speakers=hps.data.n_speakers,
-        mas_noise_scale_initial=mas_noise_scale_initial,
-        noise_scale_delta=noise_scale_delta,
-        **hps.model,
-    ).cuda(rank)
+        net_g = SynthesizerTrn(
+            len(symbols),
+            hps.data.filter_length // 2 + 1,
+            hps.train.segment_size // hps.data.hop_length,
+            n_speakers=hps.data.n_speakers,
+            mas_noise_scale_initial=mas_noise_scale_initial,
+            noise_scale_delta=noise_scale_delta,
+            **hps.model,
+        ).cuda(rank)
 
-    net_d = MultiPeriodDiscriminator(hps.model.use_spectral_norm).cuda(rank)
-    optim_g = torch.optim.AdamW(
-        filter(lambda p: p.requires_grad, net_g.parameters()),
-        hps.train.learning_rate,
-        betas=hps.train.betas,
-        eps=hps.train.eps,
-    )
-    optim_d = torch.optim.AdamW(
-        net_d.parameters(),
-        hps.train.learning_rate,
-        betas=hps.train.betas,
-        eps=hps.train.eps,
-    )
-    if net_dur_disc is not None:
-        optim_dur_disc = torch.optim.AdamW(
-            net_dur_disc.parameters(),
+        net_d = MultiPeriodDiscriminator(hps.model.use_spectral_norm).cuda(rank)
+        optim_g = torch.optim.AdamW(
+            filter(lambda p: p.requires_grad, net_g.parameters()),
             hps.train.learning_rate,
             betas=hps.train.betas,
             eps=hps.train.eps,
         )
-    else:
-        optim_dur_disc = None
-    net_g = DDP(net_g, device_ids=[rank], find_unused_parameters=True)
-    net_d = DDP(net_d, device_ids=[rank], find_unused_parameters=True)
+        optim_d = torch.optim.AdamW(
+            net_d.parameters(),
+            hps.train.learning_rate,
+            betas=hps.train.betas,
+            eps=hps.train.eps,
+        )
+        if net_dur_disc is not None:
+            optim_dur_disc = torch.optim.AdamW(
+                net_dur_disc.parameters(),
+                hps.train.learning_rate,
+                betas=hps.train.betas,
+                eps=hps.train.eps,
+            )
+        else:
+            optim_dur_disc = None
+        net_g = DDP(net_g, device_ids=[rank], find_unused_parameters=True)
+        net_d = DDP(net_d, device_ids=[rank], find_unused_parameters=True)
     
-    pretrain_G, pretrain_D, pretrain_dur = load_pretrain_model()
-    hps.pretrain_G = hps.pretrain_G or pretrain_G
-    hps.pretrain_D = hps.pretrain_D or pretrain_D
-    hps.pretrain_dur = hps.pretrain_dur or pretrain_dur
+        pretrain_G, pretrain_D, pretrain_dur = load_pretrain_model()
+        hps.pretrain_G = hps.pretrain_G or pretrain_G
+        hps.pretrain_D = hps.pretrain_D or pretrain_D
+        hps.pretrain_dur = hps.pretrain_dur or pretrain_dur
 
-    if hps.pretrain_G:
-        utils.load_checkpoint(
-                hps.pretrain_G,
-                net_g,
-                None,
-                skip_optimizer=True
-            )
-    if hps.pretrain_D:
-        utils.load_checkpoint(
-                hps.pretrain_D,
-                net_d,
-                None,
-                skip_optimizer=True
-            )
-
-
-    if net_dur_disc is not None:
-        net_dur_disc = DDP(net_dur_disc, device_ids=[rank], find_unused_parameters=True)
-        if hps.pretrain_dur:
+        if hps.pretrain_G:
             utils.load_checkpoint(
-                    hps.pretrain_dur,
-                    net_dur_disc,
+                    hps.pretrain_G,
+                    net_g,
                     None,
                     skip_optimizer=True
                 )
-                
+        if hps.pretrain_D:
+            utils.load_checkpoint(
+                    hps.pretrain_D,
+                    net_d,
+                    None,
+                    skip_optimizer=True
+                )
+
+
+        if net_dur_disc is not None:
+            net_dur_disc = DDP(net_dur_disc, device_ids=[rank], find_unused_parameters=True)
+            if hps.pretrain_dur:
+                utils.load_checkpoint(
+                        hps.pretrain_dur,
+                        net_dur_disc,
+                        None,
+                        skip_optimizer=True
+                    )
+    except Exception as e: 
+        logger.error(f"Error in init_model: {e}")
+
     try:
         if net_dur_disc is not None:
             _, _, dur_resume_lr, epoch_str = utils.load_checkpoint(
