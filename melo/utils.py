@@ -171,7 +171,14 @@ def plot_spectrogram_to_numpy(spectrogram):
     if not MATPLOTLIB_FLAG:
         import matplotlib
 
-        matplotlib.use("agg")
+        # Try to set the backend, but don't fail if it's already set
+        try:
+            matplotlib.use("agg", force=True)
+            logger.info("plot_spectrogram_to_numpy -> Successfully set matplotlib backend to 'agg'")
+        except Exception as e:
+            logger.warning(f"plot_spectrogram_to_numpy -> Could not set matplotlib backend to 'agg': {e}")
+            logger.warning(f"plot_spectrogram_to_numpy -> Using existing backend: {matplotlib.get_backend()}")
+
         MATPLOTLIB_FLAG = True
         mpl_logger = logging.getLogger("matplotlib")
         mpl_logger.setLevel(logging.WARNING)
@@ -197,7 +204,13 @@ def plot_alignment_to_numpy(alignment, info=None):
     if not MATPLOTLIB_FLAG:
         import matplotlib
 
-        matplotlib.use("agg")
+        try:
+            matplotlib.use("agg", force=True)
+            logger.info("plot_alignment_to_numpy -> Successfully set matplotlib backend to 'agg'")
+        except Exception as e:
+            logger.warning(f"plot_alignment_to_numpy -> Could not set matplotlib backend to 'agg': {e}")
+            logger.warning(f"Using existing backend: {matplotlib.get_backend()}")
+
         MATPLOTLIB_FLAG = True
         mpl_logger = logging.getLogger("matplotlib")
         mpl_logger.setLevel(logging.WARNING)

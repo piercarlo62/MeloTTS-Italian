@@ -114,18 +114,18 @@ def run():
             "use_noise_scaled_mas" in hps.model.keys()
             and hps.model.use_noise_scaled_mas is True
         ):
-            print("Using noise scaled MAS for VITS2")
+            logger.info("Using noise scaled MAS for VITS2")
             mas_noise_scale_initial = 0.01
             noise_scale_delta = 2e-6
         else:
-            print("Using normal MAS for VITS1")
+            logger.info("Using normal MAS for VITS1")
             mas_noise_scale_initial = 0.0
             noise_scale_delta = 0.0
         if (
             "use_duration_discriminator" in hps.model.keys()
             and hps.model.use_duration_discriminator is True
         ):
-            print("Using duration discriminator for VITS2")
+            logger.info("Using duration discriminator for VITS2")
             net_dur_disc = DurationDiscriminator(
                 hps.model.hidden_channels,
                 hps.model.hidden_channels,
@@ -142,7 +142,7 @@ def run():
                     "n_speakers must be > 0 when using spk conditioned encoder to train multi-speaker model"
                 )
         else:
-            print("Using normal encoder for VITS1")
+            logger.info("Using normal encoder for VITS1")
 
         net_g = SynthesizerTrn(
             len(symbols),
