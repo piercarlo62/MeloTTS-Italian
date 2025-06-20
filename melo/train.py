@@ -1,6 +1,9 @@
 ﻿# flake8: noqa: E402
 
 import os
+if 'MPLBACKEND' in os.environ:
+    print(f"Clearing problematic MPLBACKEND={os.environ['MPLBACKEND']}")
+    del os.environ['MPLBACKEND']
 import torch
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
