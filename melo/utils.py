@@ -9,12 +9,6 @@ from scipy.io.wavfile import read
 import torch
 import torchaudio
 import librosa
-
-# Fix matplotlib backend issue - must be before any matplotlib imports
-import matplotlib
-matplotlib.use('Agg', force=True)  # Force the Agg backend
-import matplotlib.pyplot as plt
-
 from melo.text import cleaned_text_to_sequence, get_bert
 from melo.text.cleaner import clean_text
 from melo import commons
@@ -173,43 +167,99 @@ def latest_checkpoint_path(dir_path, regex="G_*.pth"):
 
 
 def plot_spectrogram_to_numpy(spectrogram):
-    import numpy as np
+    global MATPLOTLIB_FLAG
+    try:
+        if not MATPLOTLIB_FLAG:
+            import matplotlib
+            # Force backend change and handle conflicts
+            try:
+                matplotlib.use("Agg", force=True)
+            except Exception as backend_error:
+                logger.warning(f"Failed to set Agg backend: {backend_error}")
+                # Try alternative backends
+                for backend in ['svg', 'pdf', 'ps']:
+                    try:
+                        matplotlib.use(backend, force=True)
+                        logger.info(f"Successfully set {backend} backend")
+                        break
+                    except:
+                        continue
+                else:
+                    logger.warning("Could not set any matplotlib backend, plots may not work")
+            
+            MATPLOTLIB_FLAG = True
+            mpl_logger = logging.getLogger("matplotlib")
+            mpl_logger.setLevel(logging.WARNING)
+        
+        import matplotlib.pylab as plt
+        import numpy as np
 
-    fig, ax = plt.subplots(figsize=(10, 2))
-    im = ax.imshow(spectrogram, aspect="auto", origin="lower", interpolation="none")
-    plt.colorbar(im, ax=ax)
-    plt.xlabel("Frames")
-    plt.ylabel("Channels")
-    plt.tight_layout()
+        fig, ax = plt.subplots(figsize=(10, 2))
+        im = ax.imshow(spectrogram, aspect="auto", origin="lower", interpolation="none")
+        plt.colorbar(im, ax=ax)
+        plt.xlabel("Frames")
+        plt.ylabel("Channels")
+        plt.tight_layout()
 
-    fig.canvas.draw()
-    data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep="")
-    data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    plt.close()
-    return data
-
+        fig.canvas.draw()
+        data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep="")
+        data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+        plt.close()
+        return data
+    except Exception as e:
+        logger.error(f"Failed to create spectrogram plot: {e}")
+        # Return a dummy black image to prevent training from crashing
+        return np.zeros((100, 200, 3), dtype=np.uint8)
 
 def plot_alignment_to_numpy(alignment, info=None):
-    import numpy as np
+    global MATPLOTLIB_FLAG
+    try:
+        if not MATPLOTLIB_FLAG:
+            import matplotlib
+            # Force backend change and handle conflicts
+            try:
+                matplotlib.use("Agg", force=True)
+            except Exception as backend_error:
+                logger.warning(f"Failed to set Agg backend: {backend_error}")
+                # Try alternative backends
+                for backend in ['svg', 'pdf', 'ps']:
+                    try:
+                        matplotlib.use(backend, force=True)
+                        logger.info(f"Successfully set {backend} backend")
+                        break
+                    except:
+                        continue
+                else:
+                    logger.warning("Could not set any matplotlib backend, plots may not work")
+            
+            MATPLOTLIB_FLAG = True
+            mpl_logger = logging.getLogger("matplotlib")
+            mpl_logger.setLevel(logging.WARNING)
+        
+        import matplotlib.pylab as plt
+        import numpy as np
 
-    fig, ax = plt.subplots(figsize=(6, 4))
-    im = ax.imshow(
-        alignment.transpose(), aspect="auto", origin="lower", interpolation="none"
-    )
-    fig.colorbar(im, ax=ax)
-    xlabel = "Decoder timestep"
-    if info is not None:
-        xlabel += "\n\n" + info
-    plt.xlabel(xlabel)
-    plt.ylabel("Encoder timestep")
-    plt.tight_layout()
+        fig, ax = plt.subplots(figsize=(6, 4))
+        im = ax.imshow(
+            alignment.transpose(), aspect="auto", origin="lower", interpolation="none"
+        )
+        fig.colorbar(im, ax=ax)
+        xlabel = "Decoder timestep"
+        if info is not None:
+            xlabel += "\n\n" + info
+        plt.xlabel(xlabel)
+        plt.ylabel("Encoder timestep")
+        plt.tight_layout()
 
-    fig.canvas.draw()
-    data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep="")
-    data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    plt.close()
-    return data
-
+        fig.canvas.draw()
+        data = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep="")
+        data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+        plt.close()
+        return data
+    except Exception as e:
+        logger.error(f"Failed to create alignment plot: {e}")
+        # Return a dummy black image to prevent training from crashing
+        return np.zeros((100, 100, 3), dtype=np.uint8)
 
 def load_wav_to_torch(full_path):
     sampling_rate, data = read(full_path)
