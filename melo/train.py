@@ -1,4 +1,4 @@
-# flake8: noqa: E402
+﻿# flake8: noqa: E402
 
 import os
 import torch
@@ -47,8 +47,18 @@ global_step = 0
 
 
 def run():
+    print("=== TRAINING STARTED ===")
+    print("Loading hyperparameters...")
+
     hps = utils.get_hparams()
+    print("Hyperparameters loaded successfully")
+    print(f"Model directory: {hps.model_dir}")
+    print(f"Training files: {hps.data.training_files}")
+
+    print("Setting up distributed training...")
     local_rank = int(os.environ["LOCAL_RANK"])
+    print(f"Local rank: {local_rank}")
+
     dist.init_process_group(
         backend="gloo",
         init_method="env://",  # Due to some training problem,we proposed to use gloo instead of nccl.
