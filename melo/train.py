@@ -72,6 +72,10 @@ def run():
     global global_step
     if rank == 0:
         logger = utils.get_logger(hps.model_dir)
+        logger.info(f"=== TRAINING SETUP ===")
+        logger.info(f"Process ID: {os.getpid()}")
+        logger.info(f"Rank: {rank}, World size: {n_gpus}")
+        logger.info(f"Initial global_step: {global_step}")
         logger.info(hps)
         utils.check_git_hash(hps.model_dir)
         writer = SummaryWriter(log_dir=hps.model_dir)
@@ -242,10 +246,21 @@ def run():
 
         epoch_str = max(epoch_str, 1)
         global_step = (epoch_str - 1) * len(train_loader)
+        if rank == 0:
+            logger.info(f"=== CHECKPOINT RESUME ===")
+            logger.info(f"Resumed from epoch: {epoch_str}")
+            logger.info(f"Train loader length: {len(train_loader)}")
+            logger.info(f"Calculated global_step: {global_step}")
+
     except Exception as e:
+        if rank == 0:
+            logger.info(f"=== NO CHECKPOINTS FOUND ===")
+            logger.info(f"Exception: {e}")
         print(e)
         epoch_str = 1
         global_step = 0
+        if rank == 0:
+            logger.info(f"Starting fresh - epoch: {epoch_str}, global_step: {global_step}")
 
     scheduler_g = torch.optim.lr_scheduler.ExponentialLR(
         optim_g, gamma=hps.train.lr_decay, last_epoch=epoch_str - 2
@@ -262,6 +277,9 @@ def run():
     scaler = GradScaler(enabled=hps.train.fp16_run)
 
     for epoch in range(epoch_str, hps.train.epochs + 1):
+        if rank == 0:
+            logger.info(f"=== STARTING EPOCH {epoch} ===")
+            logger.info(f"global_step at epoch start: {global_step}")
         try:
             if rank == 0:
                 train_and_evaluate(
@@ -290,8 +308,14 @@ def run():
                     None,
                 )
         except Exception as e:
+            if rank == 0:
+                logger.error(f"Error in epoch {epoch}: {e}")
             print(e)
             torch.cuda.empty_cache()
+        if rank == 0:
+            logger.info(f"=== COMPLETED EPOCH {epoch} ===")
+            logger.info(f"global_step after epoch: {global_step}")
+
         scheduler_g.step()
         scheduler_d.step()
         if net_dur_disc is not None:
@@ -311,6 +335,12 @@ def train_and_evaluate(
     train_loader.batch_sampler.set_epoch(epoch)
     global global_step
 
+    if rank == 0 and logger:
+        logger.info(f"=== TRAIN_AND_EVALUATE START ===")
+        logger.info(f"Epoch: {epoch}, global_step at start: {global_step}")
+        logger.info(f"log_interval: {hps.train.log_interval}")
+        logger.info(f"eval_interval: {hps.train.eval_interval}")
+
     net_g.train()
     net_d.train()
     if net_dur_disc is not None:
@@ -328,6 +358,7 @@ def train_and_evaluate(
         bert,
         ja_bert,
     ) in enumerate(tqdm(train_loader)):
+
         if net_g.module.use_noise_scaled_mas:
             current_mas_noise_scale = (
                 net_g.module.mas_noise_scale_initial
@@ -452,6 +483,10 @@ def train_and_evaluate(
 
         if rank == 0:
             if global_step % hps.train.log_interval == 0:
+                # Add debug logging before the existing log
+                if logger:
+                    logger.info(f"DEBUG: Logging condition met - global_step: {global_step}, batch_idx: {batch_idx}")
+                
                 lr = optim_g.param_groups[0]["lr"]
                 losses = [loss_disc, loss_gen, loss_fm, loss_mel, loss_dur, loss_kl]
                 logger.info(
@@ -508,6 +543,10 @@ def train_and_evaluate(
                 )
 
             if global_step % hps.train.eval_interval == 0:
+                if logger:
+                    logger.info(f"DEBUG: Checkpoint condition met - global_step: {global_step}")
+                    logger.info(f"About to save checkpoints...")
+
                 evaluate(hps, net_g, eval_loader, writer_eval)
                 utils.save_checkpoint(
                     net_g,
@@ -541,7 +580,14 @@ def train_and_evaluate(
 
         global_step += 1
 
+        # Add logging after increment
+        if rank == 0 and logger and batch_idx % 50 == 0:  # Log every 50 batches
+            logger.info(f"DEBUG: After increment - batch_idx: {batch_idx}, global_step: {global_step}")
+
+
     if rank == 0:
+        logger.info(f"=== TRAIN_AND_EVALUATE END ===")
+        logger.info(f"Epoch: {epoch}, global_step at end: {global_step}")
         logger.info("====> Epoch: {}".format(epoch))
     torch.cuda.empty_cache()
 
