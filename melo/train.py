@@ -1,6 +1,7 @@
 ﻿# flake8: noqa: E402
 
 import os
+#In case of Train on colab, delete the default matplotlib backend variable
 if 'MPLBACKEND' in os.environ:
     print(f"Clearing problematic MPLBACKEND={os.environ['MPLBACKEND']}")
     del os.environ['MPLBACKEND']
