@@ -18,7 +18,7 @@ def split_sentences_latin(text, min_len=10):
     text = re.sub('[。！？；]', '.', text)
     text = re.sub('[，]', ',', text)
     text = re.sub('[""]', '"', text)
-    text = re.sub('['']', "'", text)
+    text = re.sub(r"['']", "'", text)
     text = re.sub(r"[\<\>\(\)\[\]\"\«\»]+", "", text)
     return [item.strip() for item in txtsplit(text, 256, 512) if item.strip()]
 
