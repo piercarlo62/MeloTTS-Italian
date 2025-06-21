@@ -27,6 +27,7 @@ from text.symbols import symbols, num_languages, num_tones
 @click.option("--val-per-spk", default=4)
 @click.option("--max-val-total", default=8)
 @click.option("--clean/--no-clean", default=True)
+@click.option("--output_model_dir", default=None, help="Output directory for model checkpoints and logs")
 def main(
     metadata: str,
     cleaned_path: Optional[str],
@@ -36,6 +37,7 @@ def main(
     val_per_spk: int,
     max_val_total: int,
     clean: bool,
+    output_model_dir: Optional[str],
 ):
     if train_path is None:
         train_path = os.path.join(os.path.dirname(metadata), 'train.list')
@@ -126,6 +128,9 @@ def main(
     config["num_languages"] = num_languages
     config["num_tones"] = num_tones
     config["symbols"] = symbols
+     # Add model_dir if specified
+    if output_model_dir is not None:
+        config["model_dir"] = output_model_dir
 
     with open(out_config_path, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
