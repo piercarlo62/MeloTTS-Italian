@@ -120,5 +120,5 @@ def italian_cleaners(text):
     text = remove_aux_symbols(text)
     text = remove_punctuation_at_begin(text)
     text = collapse_whitespace(text)
-    text = re.sub(r'([^\.,!\?\-…])', r'\1.', text)
+    text = re.sub(r'([^\.,!\?\-…])$', r'\1.', text)
     return text
