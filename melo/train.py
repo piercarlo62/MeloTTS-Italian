@@ -1,7 +1,6 @@
 ﻿# flake8: noqa: E402
 
 import os
-#In case of Train on colab, delete the default matplotlib backend variable
 if 'MPLBACKEND' in os.environ:
     print(f"Clearing problematic MPLBACKEND={os.environ['MPLBACKEND']}")
     del os.environ['MPLBACKEND']
@@ -14,7 +13,6 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.cuda.amp import autocast, GradScaler
 from tqdm import tqdm
 import logging
-import argparse
 
 logging.getLogger("numba").setLevel(logging.WARNING)
 import commons
@@ -53,14 +51,11 @@ global_step = 0
 
 def run():
     import traceback
-    parser = argparse.ArgumentParser(description='Train the MeloTTS model')
-    parser.add_argument('--log_dir', type=str, default=None, help='Directory to save logs')
-    args = parser.parse_args()
-
     hps = utils.get_hparams()
-    if args.log_dir:
-        hps.log_dir = args.log_dir
-    logger = utils.get_logger(hps.model_dir, log_dir=hps.log_dir)
+    if hps.log_dir is not None:
+        logger = utils.get_logger(hps.log_dir)
+    else:
+        logger = utils.get_logger(hps.model_dir)
     logger.info("=== TRAINING STARTED ===")
     logger.info(f"Model directory: {hps.model_dir}")
     logger.info(f"Training files: {hps.data.training_files}")

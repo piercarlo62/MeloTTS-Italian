@@ -281,6 +281,7 @@ def get_hparams(init=True):
                             help='pretrain model D')
     parser.add_argument('--pretrain_dur', type=str, default=None,
                             help='pretrain model duration')
+    parser.add_argument('--log_dir', type=str, default=None,help='specific log directory')
 
     args = parser.parse_args()
 
@@ -314,6 +315,7 @@ def get_hparams(init=True):
     hparams.pretrain_D = args.pretrain_D
     hparams.pretrain_dur = args.pretrain_dur
     hparams.port = args.port
+    hparams.log_dir = args.log_dir
     return hparams
 
 
