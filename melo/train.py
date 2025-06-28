@@ -14,6 +14,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.cuda.amp import autocast, GradScaler
 from tqdm import tqdm
 import logging
+import argparse
 
 logging.getLogger("numba").setLevel(logging.WARNING)
 import commons
@@ -52,8 +53,14 @@ global_step = 0
 
 def run():
     import traceback
+    parser = argparse.ArgumentParser(description='Train the MeloTTS model')
+    parser.add_argument('--log_dir', type=str, default=None, help='Directory to save logs')
+    args = parser.parse_args()
+
     hps = utils.get_hparams()
-    logger = utils.get_logger(hps.model_dir)
+    if args.log_dir:
+        hps.log_dir = args.log_dir
+    logger = utils.get_logger(hps.model_dir, log_dir=hps.log_dir)
     logger.info("=== TRAINING STARTED ===")
     logger.info(f"Model directory: {hps.model_dir}")
     logger.info(f"Training files: {hps.data.training_files}")

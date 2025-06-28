@@ -407,15 +407,17 @@ def check_git_hash(model_dir):
         open(path, "w").write(cur_hash)
 
 
-def get_logger(model_dir, filename="train.log"):
+def get_logger(model_dir, log_dir=None, filename="train.log"):
     global logger
     logger = logging.getLogger(os.path.basename(model_dir))
     logger.setLevel(logging.DEBUG)
 
     formatter = logging.Formatter("%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s")
-    if not os.path.exists(model_dir):
-        os.makedirs(model_dir, exist_ok=True)
-    h = logging.FileHandler(os.path.join(model_dir, filename))
+    if log_dir is None:
+        log_dir = model_dir
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir, exist_ok=True)
+    h = logging.FileHandler(os.path.join(log_dir, filename))
     h.setLevel(logging.DEBUG)
     h.setFormatter(formatter)
     logger.addHandler(h)
