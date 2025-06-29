@@ -4,9 +4,7 @@ LOG_DIR=$3
 MODEL_NAME=$(basename "$(dirname $CONFIG)")
 
 PORT=10902
-while ! nc -z localhost $PORT; do
-  PORT=$((PORT + 1))
-done
+
 
 while : # auto-resume: the code sometimes crash due to bug of gloo on some gpus
 do
