@@ -58,11 +58,15 @@ def run():
         logger = utils.get_logger(hps.model_dir)
     logger.info("=== TRAINING STARTED ===")
     logger.info(f"Model directory: {hps.model_dir}")
+    print(f"Model directory: {hps.model_dir}")
     logger.info(f"Training files: {hps.data.training_files}")
+    print(f"Training files: {hps.data.training_files}")
 
     logger.info("Setting up distributed training...")
+    print("Setting up distributed training...")
     local_rank = int(os.environ["LOCAL_RANK"])
     logger.info(f"Local rank: {local_rank}")
+    print(f"Local rank: {local_rank}")
 
     dist.init_process_group(
         backend="gloo",
@@ -77,10 +81,15 @@ def run():
     global global_step
     if rank == 0:
         logger.info(f"=== TRAINING SETUP ===")
+        print(f"=== TRAINING SETUP ===")
         logger.info(f"Process ID: {os.getpid()}")
+        print(f"Process ID: {os.getpid()}")
         logger.info(f"Rank: {rank}, World size: {n_gpus}")
+        print(f"Rank: {rank}, World size: {n_gpus}")
         logger.info(f"Initial global_step: {global_step}")
+        print(f"Initial global_step: {global_step}")
         logger.info(hps)
+        print(hps)
         utils.check_git_hash(hps.model_dir)
         writer = SummaryWriter(log_dir=hps.model_dir)
         writer_eval = SummaryWriter(log_dir=os.path.join(hps.model_dir, "eval"))
@@ -121,10 +130,12 @@ def run():
             and hps.model.use_noise_scaled_mas is True
         ):
             logger.info("Using noise scaled MAS for VITS2")
+            print("Using noise scaled MAS for VITS2")
             mas_noise_scale_initial = 0.01
             noise_scale_delta = 2e-6
         else:
             logger.info("Using normal MAS for VITS1")
+            print("Using normal MAS for VITS1")
             mas_noise_scale_initial = 0.0
             noise_scale_delta = 0.0
         if (
@@ -132,6 +143,7 @@ def run():
             and hps.model.use_duration_discriminator is True
         ):
             logger.info("Using duration discriminator for VITS2")
+            print("Using duration discriminator for VITS2")
             net_dur_disc = DurationDiscriminator(
                 hps.model.hidden_channels,
                 hps.model.hidden_channels,
@@ -149,6 +161,7 @@ def run():
                 )
         else:
             logger.info("Using normal encoder for VITS1")
+            print("Using normal encoder for VITS1")
 
         net_g = SynthesizerTrn(
             len(symbols),
@@ -217,7 +230,9 @@ def run():
                     )
     except Exception as e: 
         logger.error(f"Error in init_model: {e}")
+        print(f"Error in init_model: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
+        print(f"Traceback: {traceback.format_exc()}")
 
     try:
         if net_dur_disc is not None:
@@ -263,12 +278,15 @@ def run():
     except Exception as e:
         if rank == 0:
             logger.info(f"=== NO CHECKPOINTS FOUND ===")
+            print(f"=== NO CHECKPOINTS FOUND ===")
             logger.info(f"Exception: {e}")
+            print(f"Exception: {e}")
         print(e)
         epoch_str = 1
         global_step = 0
         if rank == 0:
             logger.info(f"Starting fresh - epoch: {epoch_str}, global_step: {global_step}")
+            print(f"Starting fresh - epoch: {epoch_str}, global_step: {global_step}")
 
     scheduler_g = torch.optim.lr_scheduler.ExponentialLR(
         optim_g, gamma=hps.train.lr_decay, last_epoch=epoch_str - 2
@@ -288,7 +306,9 @@ def run():
     for epoch in range(epoch_str, hps.train.epochs + 1):
         if rank == 0:
             logger.info(f"=== STARTING EPOCH {epoch} ===")
+            print(f"=== STARTING EPOCH {epoch} ===")
             logger.info(f"global_step at epoch start: {global_step}")
+            print(f"global_step at epoch start: {global_step}")
         try:
             if rank == 0:
                 train_and_evaluate(
@@ -319,11 +339,14 @@ def run():
         except Exception as e:
             if rank == 0:
                 logger.error(f"Error in epoch {epoch}: {e}")
+                print(f"Error in epoch {epoch}: {e}")
             print(e)
             torch.cuda.empty_cache()
         if rank == 0:
             logger.info(f"=== COMPLETED EPOCH {epoch} ===")
+            print(f"=== COMPLETED EPOCH {epoch} ===")
             logger.info(f"global_step after epoch: {global_step}")
+            print(f"global_step after epoch: {global_step}")
 
         scheduler_g.step()
         scheduler_d.step()
@@ -346,9 +369,13 @@ def train_and_evaluate(
 
     if rank == 0 and logger:
         logger.info(f"=== TRAIN_AND_EVALUATE START ===")
+        print(f"=== TRAIN_AND_EVALUATE START ===")
         logger.info(f"Epoch: {epoch}, global_step at start: {global_step}")
+        print(f"Epoch: {epoch}, global_step at start: {global_step}")
         logger.info(f"log_interval: {hps.train.log_interval}")
+        print(f"log_interval: {hps.train.log_interval}")
         logger.info(f"eval_interval: {hps.train.eval_interval}")
+        print(f"eval_interval: {hps.train.eval_interval}")
 
     net_g.train()
     net_d.train()
@@ -495,6 +522,7 @@ def train_and_evaluate(
                 # Add debug logging before the existing log
                 if logger:
                     logger.info(f"DEBUG: Logging condition met - global_step: {global_step}, batch_idx: {batch_idx}")
+                    print(f"DEBUG: Logging condition met - global_step: {global_step}, batch_idx: {batch_idx}")
                 
                 lr = optim_g.param_groups[0]["lr"]
                 losses = [loss_disc, loss_gen, loss_fm, loss_mel, loss_dur, loss_kl]
@@ -503,7 +531,13 @@ def train_and_evaluate(
                         epoch, 100.0 * batch_idx / len(train_loader)
                     )
                 )
+                print(
+                    "Train Epoch: {} [{:.0f}%]".format(
+                        epoch, 100.0 * batch_idx / len(train_loader)
+                    )
+                )
                 logger.info([x.item() for x in losses] + [global_step, lr])
+                print([x.item() for x in losses] + [global_step, lr])
                 import traceback
                 try:
                     scalar_dict = {
@@ -554,14 +588,18 @@ def train_and_evaluate(
                 except Exception as e:
                     if logger:
                         logger.error(f"Error on Utils-Summarize: {e}")
+                        print(f"Error on Utils-Summarize: {e}")
                         logger.error(f"Full traceback:\n{traceback.format_exc()}")
+                        print(f"Full traceback:\n{traceback.format_exc()}")
                     
 
 
             if global_step % hps.train.eval_interval == 0:
                 if logger:
                     logger.info(f"DEBUG: Checkpoint condition met - global_step: {global_step}")
+                    print(f"DEBUG: Checkpoint condition met - global_step: {global_step}")
                     logger.info(f"About to save checkpoints...")
+                    print(f"About to save checkpoints...")
 
                 evaluate(hps, net_g, eval_loader, writer_eval)
                 utils.save_checkpoint(
@@ -599,12 +637,16 @@ def train_and_evaluate(
         # Add logging after increment
         if rank == 0 and logger and batch_idx % 50 == 0:  # Log every 50 batches
             logger.info(f"DEBUG: After increment - batch_idx: {batch_idx}, global_step: {global_step}")
+            print(f"DEBUG: After increment - batch_idx: {batch_idx}, global_step: {global_step}")
 
 
     if rank == 0:
         logger.info(f"=== TRAIN_AND_EVALUATE END ===")
+        print(f"=== TRAIN_AND_EVALUATE END ===")
         logger.info(f"Epoch: {epoch}, global_step at end: {global_step}")
+        print(f"Epoch: {epoch}, global_step at end: {global_step}")
         logger.info("====> Epoch: {}".format(epoch))
+        print("====> Epoch: {}".format(epoch))
     torch.cuda.empty_cache()
 
 
