@@ -4,8 +4,8 @@ from typing import List
 import gruut
 from gruut_ipa import IPA # pip install gruut_ipa
 
-from .base import BasePhonemizer
-from .punctuation import Punctuation
+from base import BasePhonemizer
+from punctuation import Punctuation
 
 # Table for str.translate to fix gruut/TTS phoneme mismatch
 GRUUT_TRANS_TABLE = str.maketrans("g", "ɡ")
@@ -141,7 +141,7 @@ if __name__ == "__main__":
     import json
 
     e = Gruut(language="it-it", keep_puncs=True, keep_stress=True, use_espeak_phonemes=True)
-    symbols = [  # it + sp
+    symbols = [
         "_",
         ",",
         ".",
@@ -210,20 +210,22 @@ if __name__ == "__main__":
         "\u2193",
         "\u2191",
         " ",
-        "ɡ", 
-        "r", 
-        "ɲ", 
-        "ʝ", 
-        "ʎ",
-        "ː",
-        "tʃ",
-        "dʒ",
-        "ʃ",
-        "ʒ",
-        "ɛ",
-        "ɔ"
+        "\u0261",
+        "r",
+        "\u0272",
+        "\u029d",
+        "\u028e",
+        "\u02d0",
+        "t\u0283",
+        "d\u0292",
+        "\u0283",
+        "\u0292",
+        "\u025b",
+        "\u0254",
+        "\u032a"
     ]
-    with open('/home/xumin/workspace/VITS-Training-Multiling/230715_it/metadata.txt', 'r') as f:
+    
+    with open('../../data/example/metadata.list', 'r', encoding='utf-8') as f:
         lines = f.readlines()
     
      
@@ -250,13 +252,13 @@ if __name__ == "__main__":
     print(not_existed_sym)
 
 
-    with open('./text/it_phonemizer/italian_symbols.txt', 'w') as g:
+    with open('italian_symbols.txt', 'w',  encoding='utf-8') as g:
         g.writelines(symbols + not_existed_sym)
         
-    with open('./text/it_phonemizer/example_ipa.txt', 'w') as g:
+    with open('example_ipa.txt', 'w',  encoding='utf-8') as g:
         g.writelines(phonemes)
 
     data = {'symbols': symbols + not_existed_sym}
 
-    with open('./text/it_phonemizer/it_symbols.json', 'w') as f:
+    with open('it_symbols.json', 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=4)

@@ -127,8 +127,8 @@ def main(
     config["data"]["n_speakers"] = len(spk_id_map)
     config["num_languages"] = num_languages
     config["num_tones"] = num_tones
-    config["symbols"] = symbols
-     # Add model_dir if specified
+    config["symbols"] = symbols + new_symbols
+    # Add model_dir if specified
     if output_model_dir is not None:
         config["model_dir"] = output_model_dir
 

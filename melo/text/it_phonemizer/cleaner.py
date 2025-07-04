@@ -3,7 +3,7 @@
 
 
 import re
-from .italian_abbreviations import abbreviations_it
+from italian_abbreviations import abbreviations_it
 
 # Regular expression matching whitespace:
 _whitespace_re = re.compile(r"\s+")

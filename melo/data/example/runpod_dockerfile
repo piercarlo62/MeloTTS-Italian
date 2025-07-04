@@ -1,0 +1,130 @@
+# RunPod Dockerfile for RTX A5000 with Ubuntu 24.04, Python 3.9, CUDA, and Jupyter
+FROM nvidia/cuda:12.2-devel-ubuntu24.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH=${CUDA_HOME}/bin:${PATH}
+ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    build-essential \
+    curl \
+    wget \
+    git \
+    vim \
+    htop \
+    tmux \
+    openssh-server \
+    rsync \
+    unzip \
+    pkg-config \
+    libssl-dev \
+    libffi-dev \
+    libbz2-dev \
+    libreadline-dev \
+    libsqlite3-dev \
+    libncursesw5-dev \
+    xz-utils \
+    tk-dev \
+    libxml2-dev \
+    libxmlsec1-dev \
+    libffi-dev \
+    liblzma-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python 3.9
+RUN add-apt-repository ppa:deadsnakes/ppa -y && \
+    apt-get update && \
+    apt-get install -y python3.9 python3.9-dev python3.9-distutils && \
+    rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.9 as default
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1 && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1
+
+# Install pip
+RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
+    python get-pip.py && \
+    rm get-pip.py
+
+# Upgrade pip and install essential Python packages
+RUN pip install --upgrade pip setuptools wheel
+
+# Install PyTorch with CUDA support (for RTX A5000)
+RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# Install Jupyter and common data science packages
+RUN pip install \
+    jupyter \
+    jupyterlab \
+    notebook \
+    ipywidgets \
+    numpy \
+    pandas \
+    matplotlib \
+    seaborn \
+    scikit-learn \
+    opencv-python \
+    pillow \
+    requests \
+    tqdm \
+    tensorboard
+
+# Install additional ML/AI packages
+RUN pip install \
+    transformers \
+    datasets \
+    accelerate \
+    bitsandbytes \
+    xformers
+
+# Create working directory
+WORKDIR /workspace
+
+# Create jupyter config directory
+RUN mkdir -p /root/.jupyter
+
+# Generate Jupyter config
+RUN jupyter notebook --generate-config
+
+# Configure Jupyter to allow all IPs and disable token for RunPod
+RUN echo "c.NotebookApp.ip = '0.0.0.0'" >> /root/.jupyter/jupyter_notebook_config.py && \
+    echo "c.NotebookApp.port = 8888" >> /root/.jupyter/jupyter_notebook_config.py && \
+    echo "c.NotebookApp.token = ''" >> /root/.jupyter/jupyter_notebook_config.py && \
+    echo "c.NotebookApp.password = ''" >> /root/.jupyter/jupyter_notebook_config.py && \
+    echo "c.NotebookApp.allow_root = True" >> /root/.jupyter/jupyter_notebook_config.py && \
+    echo "c.NotebookApp.allow_origin = '*'" >> /root/.jupyter/jupyter_notebook_config.py && \
+    echo "c.NotebookApp.notebook_dir = '/workspace'" >> /root/.jupyter/jupyter_notebook_config.py
+
+# Configure JupyterLab
+RUN echo "c.ServerApp.ip = '0.0.0.0'" >> /root/.jupyter/jupyter_lab_config.py && \
+    echo "c.ServerApp.port = 8888" >> /root/.jupyter/jupyter_lab_config.py && \
+    echo "c.ServerApp.token = ''" >> /root/.jupyter/jupyter_lab_config.py && \
+    echo "c.ServerApp.password = ''" >> /root/.jupyter/jupyter_lab_config.py && \
+    echo "c.ServerApp.allow_root = True" >> /root/.jupyter/jupyter_lab_config.py && \
+    echo "c.ServerApp.allow_origin = '*'" >> /root/.jupyter/jupyter_lab_config.py && \
+    echo "c.ServerApp.root_dir = '/workspace'" >> /root/.jupyter/jupyter_lab_config.py
+
+# Set up SSH for RunPod
+RUN mkdir -p /var/run/sshd && \
+    echo 'root:runpod' | chpasswd && \
+    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+
+# Expose ports
+EXPOSE 8888 22
+
+# Create startup script
+RUN echo '#!/bin/bash' > /start.sh && \
+    echo 'service ssh start' >> /start.sh && \
+    echo 'echo "Starting Jupyter Lab..."' >> /start.sh && \
+    echo 'cd /workspace' >> /start.sh && \
+    echo 'jupyter lab --allow-root --no-browser --ip=0.0.0.0 --port=8888' >> /start.sh && \
+    chmod +x /start.sh
+
+# Set default command
+CMD ["/start.sh"]

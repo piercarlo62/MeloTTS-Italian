@@ -1,0 +1,54 @@
+FROM ubuntu:22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
+# Install system dependencies and Python 3.9
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
+    curl \
+    wget \
+    gnupg \
+    lsb-release \
+    ca-certificates \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    python3.9 \
+    python3.9-venv \
+    python3.9-dev \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python 3.9 as default
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.9 1 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1
+
+# Install pip for Python 3.9
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
+
+# Add CUDA 11.8 repository and install runtime
+RUN mkdir -p /etc/apt/keyrings && \
+    curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb -o cuda-keyring.deb && \
+    dpkg -i cuda-keyring.deb && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends cuda-11-8 && \
+    rm -rf /var/lib/apt/lists/* && \
+    rm cuda-keyring.deb
+
+# Install Python packages
+RUN python3.9 -m pip install --upgrade pip && \
+    python3.9 -m pip install jupyter && \
+    python3.9 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# Set working directory
+WORKDIR /workspace
+
+# Expose Jupyter port
+EXPOSE 8888
+
+# Default command
+CMD ["jupyter", "notebook", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root"]
+
+
